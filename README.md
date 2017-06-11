@@ -27,7 +27,7 @@ GNU General Public License, version 3.
 
 # INSTALL :
 * Don't forget to logout from your Google account before using it ;
-**ctrl + shift + A** in firefox -> Greasemonkey user scripts -> drag-and-drop the script on it;
+* **ctrl + shift + A** in firefox -> **click** on Greasemonkey user scripts tab -> **drag-and-drop** the script on it;
 * Enjoy !
 
 # SCREENS
