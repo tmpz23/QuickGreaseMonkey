@@ -31,12 +31,12 @@
 * Enjoy !
 
 # SCREENS
-![1](compact.png "Compact view")
-![2](dates_sort.png "Date sort view")
-![3](FQDN_sort.png "FQDN sort view")
-![4](dendro_graph.png "Dendro view")
-![5](collapsible_tree_graph.png "Tree view")
-![6](force_graph.png "Force view")
+![1](screens/compact.png "Compact view")
+![2](screens/dates_sort.png "Date sort view")
+![3](screens/FQDN_sort.png "FQDN sort view")
+![4](screens/dendro_graph.png "Dendro view")
+![5](screens/collapsible_tree_graph.png "Tree view")
+![6](screens/force_graph.png "Force view")
 
 
 # CODE OVERVIEW :
