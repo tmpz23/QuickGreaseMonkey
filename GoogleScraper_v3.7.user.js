@@ -8,7 +8,7 @@
 // @include     https://www.google.com/webhp*
 // @include     https://www.google.fr/custom*
 // @include     https://www.google.com/custom*
-// @version     3.6
+// @version     3.7
 // @grant       GM_getValue
 // @grant       GM_setValue
 // @grant       GM_deleteValue
@@ -31,32 +31,41 @@
 // https://d3js.org
 
 // Recherche en POST & autre
-// 
-// bare de recherche :
-// changements dans le corps de la page lors de l'appuis sur échap / clique dans les suggestions,
-// vidéo & autre : changement d'onglet & #
-// Problème lors du passage vidéos -> recherche quand checkbox cochée
-// https://www.google.fr/search?q=...#q= ...
+	// 
+	// bare de recherche :
+	// changements dans le corps de la page lors de l'appuis sur échap / clique dans les suggestions,
+	// vidéo & autre : changement d'onglet & #
+	// Problème lors du passage vidéos -> recherche quand checkbox cochée
+	// https://www.google.fr/search?q=...#q= ...
+	// régler les forces pour le diag de force
+	// gs_l=psy-ab qui foire = event à attraper;
 
-var RECHERCHE_VUE_DATES					= 100;
-var RECHERCHE_VUE_FQDNS					= 101;
-var RECHERCHE_VUE_URLS					= 102;
-var RECHERCHE_VUE_COMPACTE				= 103;
-var RECHERCHE_GRAPHE_BUBBLE				= 104;
-var RECHERCHE_GRAPHE_DENDRO				= 105;
-var RECHERCHE_GRAPHE_COLLAPSIBLE_TREE	= 106;
-var RECHERCHE_GRAPHE_FORCE				= 107;
-var RECHERCHE_HTML						= 110;
+	var RECHERCHE_VUE_DATES					= 100;
+	var RECHERCHE_VUE_FQDNS					= 101;
+	var RECHERCHE_VUE_URLS					= 102;
+	var RECHERCHE_VUE_COMPACTE				= 103;
+	var RECHERCHE_GRAPHE_BUBBLE				= 104;
+	var RECHERCHE_GRAPHE_DENDRO_TREE		= 105;
+	var RECHERCHE_GRAPHE_TREE				= 106;
+	var RECHERCHE_GRAPHE_RADIAL_TREE		= 107;
+	var RECHERCHE_GRAPHE_FORCE_TREE			= 108;
+	var RECHERCHE_HTML						= 110;
 
-var RECHERCHE_GRAPHE_SEPARATEUR			= '£';
+	var RECHERCHE_GRAPHE_SEPARATEUR			= '£';
 
-var RECHERCHE_ETAT_INITIAL				= 200;
-var RECHERCHE_ETAT_INTERMEDIAIRE		= 201;
-var RECHERCHE_ETAT_FINAL				= 202;
+	var RECHERCHE_ETAT_INITIAL				= 200;
+	var RECHERCHE_ETAT_INTERMEDIAIRE		= 201;
+	var RECHERCHE_ETAT_FINAL				= 202;
 
-var PARAMETRE_PAGE_INITIALE				= 300;
-var PARAMETRE_PAGE_SUIVANTE				= 301;
+	var PARAMETRE_PAGE_INITIALE				= 300;
+	var PARAMETRE_PAGE_SUIVANTE				= 301;
 
+	var BTN_SUIVANT_TXT						= "Suivant";
+	var A_VIDEOTAB_TXT						= "Vidéos";
+	var A_SEARCHTAB_TXT						= "Tous";
+	var A_NEWSTAB_TXT						= "Actualités";
+
+var PRO_MOD = true; // modifs de l'interface de la page + events
 var TEMPS=1000 + Math.floor((Math.random() * 1200) + 1);
 
 var recherche = new Recherche();
@@ -73,19 +82,34 @@ var style = "<style>"+
 	".GS_NDD { color : #00cc5f; font-weight: bold; } "+ // Pour les NDDs en couleur
 	".GS_EXT { color : #00adcc; font-weight: bold; } "+ // Pour les extensions en couleur
 	".GS_PATH { color : #a0a0a0; font-weight: bold; } "+ // Pour les path en couleur
-	// Graphes
-		".node circle { cursor: pointer; fill: #999; stroke: #111; stroke-width: 1px; }"+
-		".node text { font: 10px sans-serif; }"+
-		".link { fill: none; stroke: #555; stroke-opacity: 0.4; stroke-width: 1.5px; }"+
-		".node--internal circle { fill: #555; }"+
-		".node--internal text { text-shadow: 0 1px 0 #fff, 0 -1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff; }"+
 	"</style>";
 
 // Gérer les parametres de recherche de la page ;
 function Parametres(){
-	this.q = $("#lst-ib").val();
-	this.filter = 0;
-	this.start = "&start="+parseInt($("table#nav td.cur").text())*100;
+	this.q 			= ""; // recherche séparée par des '+' uriEncodée
+	this.num 		= 100; // nombre de resultats : de 0 à 100 ... +-1073741824
+	this.noj 		= "";
+	this.source 	= "";
+	this.sa 		= "";
+	this.ved 		= "";
+	this.biw 		= "";
+	this.bih 		= "";
+	this.dpr 		= "";
+	this.as_epq 	= ""; // Exact matching ie "a b"
+	this.as_oq 		= ""; // as_oq="query+string"+goes+here : "query+string" OR goes OR here
+	this.as_eq 		= ""; // -
+	this.as_filetype = ""; // ext:
+	this.ie 		= "utf-8"; // par défaut utf8
+	this.oe 		= "utf-8"; // par défaut utf8
+	this.client		= "firefox-b"; // navigateur
+	this.tbm 		= (
+		document.location.href.split('#')[0].split("&tbm=").length > 1 ? 
+		document.location.href.split('#')[0].split("&tbm=")[1].split('&')[0] : 
+		""
+	);
+	this.gfe_rd		= "cr";
+	this.filter 	= 0; // filtrage sur les résultats multiples pour certains sites
+	this.start 		= parseInt($("table#nav td.cur").text())*100; // décalage : de 0 à 990 / 991 = message / idem 1073741824+1
 	// Pays
 	//this.cr="";
 	// Langue
@@ -93,21 +117,31 @@ function Parametres(){
 	// Date
 	//this.tbs="";
 	// this.tbas="";
-
+	//https://moz.com/blog/the-ultimate-guide-to-the-google-search-parameters
 	this.getGET = function(page){
 		//var _interv = (DEB != "" && FIN != "")? "&tbs=cdr:1,cd_min:"+DEB+",cd_max:"+FIN : "";
-		var _params = "filter=0&num=100&q=";
+		var _uriComponents =
+			"q="+encodeURIComponent($("input#lst-ib").val()).split('%20').join('+')+
+			"&ie="+this.ie+
+			"&oe="+this.oe+
+			"&client="+this.client+
+			"&gfe_rd="+this.gfe_rd+
+			(this.ie 		!== "" ? "&ie="+this.ie : "")+
+			"&num="+this.num+
+			(page===PARAMETRE_PAGE_SUIVANTE ? "&start=" + this.start : "")+
+			(this.tbm 		!== "" ? "&tbm="+this.tbm : "")+
+			(this.filter 	!== "" ? "&filter="+this.filter : "")
+		;
 
-		if(page == PARAMETRE_PAGE_SUIVANTE)
-			return _params+encodeURIComponent($("input#lst-ib").val())+this.start;
-		else if(page == PARAMETRE_PAGE_INITIALE)
-			return _params+encodeURIComponent($("input#lst-ib").val());
+		return _uriComponents;
 	};
 
-	// Retourne un booléen vrai si on affiche actuellement par 100
-	this.isN100 = function(){ return document.location.href.split("&num=100").length > 1 ; }
-	this.isSearchPage = function(){ return document.location.href.split("&tbm=").length === 1 ; }
-	this.isVideoPage = function(){ return document.location.href.split("&tbm=vid").length > 1 ; }
+	this.getParamsRecherche = function(){ return "&num=100"+(this.filter !== "" ? "&filter="+this.filter : ""); }
+
+	this.isN100 = function(){ return document.location.href.split('#')[0].split("&num=100").length > 1 ; } // Retourne un booléen vrai si on affiche actuellement par 100
+	this.isSearchPage = function(){ return document.location.href.split('#')[0].split("&tbm=").length === 1 ; }
+	this.isVideoPage  = function(){ return document.location.href.split('#')[0].split("&tbm=vid").length > 1 ; }
+	this.isNewsPage   = function(){ return document.location.href.split('#')[0].split("&tbm=nws").length > 1 ; }
 }
 
 // Gérer les résultats de la recherche Google
@@ -116,6 +150,7 @@ function Resultats(){
 
 	this.resultatsHTML = ""; // Utilisé lors du scrap
 	this.resultats = []; // 0 = date; 1 = titre; 2 = url; 3 = texte; 4 = rank;
+	this.parametres = new Parametres();
 
 	this.charger 		= function(){ this.resultats = GM_getValue("GS_Resultats",[]); this.resultatsHTML = GM_getValue("GS_ResultatsHTML",""); }
 	this.sauvegarder 	= function(){ GM_setValue("GS_Resultats",this.resultats); GM_setValue("GS_ResultatsHTML",this.resultatsHTML); }
@@ -125,13 +160,29 @@ function Resultats(){
 		this.charger();
 		this.resultatsHTML += $("div#rcnt div#res div#search div#rso").html();
 
-		$("div#rcnt div#res div#search div#rso div.g").each(function(){
-			var _date 	= formater_date($(".rc .s .st .f", this).text());
-			var _titre 	= $(".rc .r a", this).text();
-			var _url 	= $(".rc .r a", this).attr("href");
-			var _texte 	= $(".rc .s .st", this).html();
-			var _rank 	= $(".rc .r a", this).attr("rank");
-			if(_url != undefined) that.resultats.push([_date,_titre,_url,_texte,_rank]);
+		var res_path = "";
+
+		if(this.parametres.isNewsPage()){
+			res_path = "div#rcnt div#res div#search div#rso div.g .ts div";
+			date_path = ".slp .f";
+			text_path = ".st";
+		}else if(this.parametres.isVideoPage()){
+			res_path  = "div#rcnt div#res div#search div#rso div.g .rc";
+			date_path = ".s div.slp.f";
+			text_path = ".s .st";
+		}else if(this.parametres.isSearchPage()){
+			res_path  = "div#rcnt div#res div#search div#rso div.g .rc";
+			date_path = ".s span.st .f";
+			text_path = ".s .st";
+		}
+		
+		$(res_path).each(function(){
+			var _date 	= formater_date($(date_path, this).text());
+			var _titre 	= $(".r a", this).text();
+			var _url 	= $(".r a", this).attr("href");
+			var _texte 	= $(text_path, this).html();
+			var _rank 	= $(".r a", this).attr("rank");
+			if(_url != undefined) that.resultats.push([_date,_titre,_url,_texte,(_rank !== undefined ? _rank : "")]);
 		});
 
 		this.sauvegarder();
@@ -141,6 +192,16 @@ function Resultats(){
 	this.getHTML = function(typeTris){
 		if(typeTris === RECHERCHE_HTML) return this.resultatsHTML;
 		var resultatsHTML="";
+		var legende_graphe = "<em>[d] délimite les domaines en sens inverse et [f] délimite le reste de l'url dans le bon sens : dossiers et fichiers ;</em>";
+		var graphe_css = "<style>"+
+				".overlay{ background-color:#EEE; }"+
+				".node circle { cursor: pointer; fill: #999; stroke: #111; stroke-width: 1px; } "+
+				".node text { font: 10px sans-serif; } "+
+				".link { fill: none; stroke: #555; stroke-opacity: 0.4; stroke-width: 1.5px; } "+
+				".node--internal circle { fill: #555; } "+
+				".node--internal text { text-shadow: 0 1px 0 #fff, 0 -1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff; }"+
+			"</style>";
+
 		switch(typeTris){
 			case RECHERCHE_VUE_FQDNS: // Tris par fqdns
 				this.resultats.sort(function(x, y){ return getReverseUrl(x[2]) > getReverseUrl(y[2]) ? 1 : -1 ; });
@@ -152,7 +213,13 @@ function Resultats(){
 				resultatsHTML="<h2>Tris FQDN :</h2><br /><table>"+resultatsHTML+"</table>";
 				break;
 			case RECHERCHE_VUE_DATES: // Tris par dates décroissantes
-				this.resultats.sort(function(x, y){ if(x[0] == "") return 1; if(y[0] == "") return -1; return new Date(x[0]) > new Date(y[0]) ? -1 : 1 ; });
+				this.resultats.sort(function(x, y){
+					if(x[0] === "" && y[0] === "") return parseInt(x[4]) > parseInt(y[4]) ? 1 : -1;
+					else if(x[0] === "") return 1;
+					else if(y[0] === "") return -1;
+
+					return new Date(x[0]) > new Date(y[0]) ? -1 : 1;
+				});
 				for(var i=0; i<this.resultats.length; i++){
 					resultatsHTML+=
 						"<tr><td>"+this.resultats[i][4]+"</td><td>"+this.resultats[i][0]+"</td>"+
@@ -167,6 +234,7 @@ function Resultats(){
 				resultatsHTML="<h2>Tris FQDN - urls seules :</h2><br /><table>"+resultatsHTML+"</table>";
 				break;
 			case RECHERCHE_VUE_COMPACTE:
+				this.resultats.sort(function(x, y){ return parseInt(x[4]) > parseInt(y[4]) ? 1 : -1 ; });
 				for(var i=0; i<this.resultats.length; i++){
 					resultatsHTML+=
 						"<tr><td>"+this.resultats[i][4]+"</td><th><a href='"+(this.resultats[i][2])+"'>"+escapeHtml(this.resultats[i][1])+"</a></th>"+
@@ -175,24 +243,41 @@ function Resultats(){
 				};
 				resultatsHTML="<h2>Vue compacte gardant l'ordre initial de la recherche :</h2><br /><table>"+resultatsHTML+"</table>";
 				break;
-			case RECHERCHE_GRAPHE_DENDRO:
-				resultatsHTML = "<h2>Vue dendrogramme (arbre avec feuilles au même niveau) :</h2>"+
-					"<svg id='GS_VueDendroGraphe'></svg>"+
-					"<em>[d] délimite les domaines en sens inverse et [f] délimite le reste de l'url dans le bon sens : dossiers et fichiers ;</em>";
+			case RECHERCHE_GRAPHE_DENDRO_TREE:
+				resultatsHTML = "<h2>Vue dendrogramme (arbre avec feuilles au même niveau) :</h2>"+graphe_css+
+					"<svg id='GS_VueDendroGraphe' class='overlay'></svg>"+
+					legende_graphe;
 				break;
-			case RECHERCHE_GRAPHE_COLLAPSIBLE_TREE:
+			case RECHERCHE_GRAPHE_TREE:
 				resultatsHTML = "<h2>Vue arborescente compactable (cliques sur les titres !) :"+
-					"<input id='GS_collapsibleTreeGrapheCB' type='checkbox'/></h2>"+
-					"<svg id='GS_VueCollapsibleTreeGraphe'></svg>"+
-					"<em>[d] délimite les domaines en sens inverse et [f] délimite le reste de l'url dans le bon sens : dossiers et fichiers ;</em>";
+					"<style>"+
+						".node{ cursor: pointer; }"+
+						".overlay{ background-color:#EEE; }"+
+						".node circle{ fill: #fff; stroke: steelblue; stroke-width: 1.5px; }"+
+						".node text{ font-size:10px; font-family:sans-serif; }"+
+						".link{ fill: none; stroke: #ccc; stroke-width: 1.5px; }"+
+						".templink{ fill: none; stroke: red; stroke-width: 3px; }"+
+						".ghostCircle.show{ display:block; }"+
+						".ghostCircle, .activeDrag .ghostCircle{ display: none; }"+
+					"</style>"+
+					"<input id='GS_treeGrapheCB' type='checkbox'/></h2>"+
+					"<svg id='GS_VueTreeGraphe' class='overlay'></svg>"+
+					legende_graphe;
 				break;
-			case RECHERCHE_GRAPHE_FORCE:
-				resultatsHTML = "<h2>Vue diagramme de force :</h2>"+
-					"<svg id='GS_VueForce'></svg>"+
-					"<em>[d] délimite les domaines en sens inverse et [f] délimite le reste de l'url dans le bon sens : dossiers et fichiers ;</em>";
+			case RECHERCHE_GRAPHE_RADIAL_TREE:
+				resultatsHTML = "<h2>Vue radiale :</h2>"+graphe_css+
+					"<svg id='GS_VueRadialTreeGraphe' class='overlay'></svg>"+
+					legende_graphe;
+				break;
+			case RECHERCHE_GRAPHE_FORCE_TREE:
+				resultatsHTML = "<h2>Vue diagramme de force :</h2>"+graphe_css+
+					"<svg id='GS_VueForceTreeGraphe' class='overlay'></svg>"+
+					legende_graphe;
 				break;
 			case RECHERCHE_GRAPHE_BUBBLE:
-				resultatsHTML = "<h2>Vue Bubble (filtrage des mots et affichage selon leur frequences et quand ils apparaîssent plus d'une fois dans les textes, titres) : </h2><svg id='GS_VueBubbleChartGraphe' width='960' height='960' font-family='sans-serif' font-size='10' text-anchor='middle'></svg><br/>https://www.youtube.com/watch?v=bw9CALKOvAI";
+				resultatsHTML = "<h2>Vue Bubble : </h2>"+graphe_css+
+					"<svg id='GS_VueBubbleGraphe' class='overlay' font-family='sans-serif' font-size='10' text-anchor='middle'></svg>"+
+					"<em>Filtrage des mots et affichage selon leur frequences et quand ils apparaîssent plus d'une fois dans les textes, titres)</em>";
 				break;
 			default:
 				break;
@@ -202,25 +287,33 @@ function Resultats(){
 
 	// Traitement des résultats selon les vues demandées (graphe, etc.)
 	this.process = function(typeTris){
+		var width = $(document).width()-100;
+		var height = $(document).height()-20;
 		switch(typeTris){
-			case RECHERCHE_GRAPHE_DENDRO:
-				var data_arr = this.extractDataForTree("id");
-				$("#GS_VueDendroGraphe").attr("width",data_arr[1]*140 + 560).attr("height",data_arr[2]*10);
-				dendroGraphe(data_arr[0],"GS_VueDendroGraphe");
+			case RECHERCHE_GRAPHE_DENDRO_TREE:
+				var data_arr = this.extractDataForTree();
+				$("#GS_VueDendroGraphe").attr("width",width).attr("height",height);
+				dendroGraphe(data_arr[0],"GS_VueDendroGraphe",data_arr[1]*10);
 				break;
-			case RECHERCHE_GRAPHE_COLLAPSIBLE_TREE:
-				var data_arr = this.extractDataForTree("id");
-				$("#GS_VueCollapsibleTreeGraphe").attr("width",data_arr[1]*140 + 50).attr("height",data_arr[2]*10 + 50);
-				collapsibleTreeGraphe(data_arr[0],"GS_VueCollapsibleTreeGraphe","GS_collapsibleTreeGrapheCB");
+			case RECHERCHE_GRAPHE_TREE:
+				var data_arr = this.extractDataForTree();
+				$("#GS_VueTreeGraphe").attr("width",width).attr("height",height);
+				treeGraphe(data_arr[0],"GS_VueTreeGraphe","GS_treeGrapheCB");
 				break;
-			case RECHERCHE_GRAPHE_FORCE:
-				var data_arr = this.extractDataForTree("name");
-				$("#GS_VueForce").attr("width",900).attr("height",900);
-				forceGraphe(data_arr[0],"GS_VueForce");
+			case RECHERCHE_GRAPHE_RADIAL_TREE:
+				var data_arr = this.extractDataForTree();
+				$("#GS_VueRadialTreeGraphe").attr("width",width).attr("height",height);
+				radialTreeGraphe(data_arr[0],"GS_VueRadialTreeGraphe");
 				break;
 			case RECHERCHE_GRAPHE_BUBBLE:
 				var data = this.extractWordsFreq();
-				bubbleChartGraphe(data,"GS_VueBubbleChartGraphe");
+				$("#GS_VueBubbleGraphe").attr("width",width).attr("height",height);
+				bubbleGraphe(data,"GS_VueBubbleGraphe");
+				break;
+			case RECHERCHE_GRAPHE_FORCE_TREE:
+				var data_arr = this.extractDataForTree();
+				$("#GS_VueForceTreeGraphe").attr("width",width).attr("height",height);
+				forceGraphe(data_arr[0],"GS_VueForceTreeGraphe");
 				break;
 			default:
 				break;
@@ -261,16 +354,14 @@ function Resultats(){
 	}
 	
 	// Génération d'un tableau d'objet au format [{id:"val.val.val"},[...]] complété sur les noeux intermédiaires et dédup
-	this.extractDataForTree = function(attr_name){
+	this.extractDataForTree = function(){
 		var data = [];
-		var data_width_len = 0;
 		var data_height_len = 0; // Faudrait compter les parents des feuilles pour l'espacement entre groupes
+
 		$.each(this.resultats, function(i, el){
 			if(el[2] !== ""){
 				var reverseUrl = "";
 				var reverseUrlSplit = getReverseUrl(el[2]).split(RECHERCHE_GRAPHE_SEPARATEUR);
-				if(reverseUrlSplit.length>data_width_len)
-					data_width_len=reverseUrlSplit.length;
 
 				data_height_len += 1;
 				for(var i=0; i<reverseUrlSplit.length; i++){
@@ -282,12 +373,9 @@ function Resultats(){
 			}
 		});
 		for(var i=0; i<data.length; i++)
-			if(attr_name === "id")
-				data[i]={id : data[i]};
-			else if(attr_name === "name")
-				data[i]={id : data[i], name : data[i]};
+			data[i]={id : data[i]};
 
-		return [data,data_width_len,data_height_len];
+		return [data,data_height_len];
 	}
 }
 
@@ -300,7 +388,6 @@ function Recherche(){
 
 	this.url = "https://www.google.fr/search?";
 
-	this.parametres = new Parametres();
 	this.resultats 	= new Resultats();
 
 	this.charger = function(){ this.etat = GM_getValue("GS_Recherche_etat",0); }
@@ -310,12 +397,12 @@ function Recherche(){
 		this.resultats.reinitialiser();
 	};
 	this.recuperer 	= function(){ this.resultats.recuperer(); }
-	this.getGET 	= function(page = PARAMETRE_PAGE_INITIALE){ return this.url + this.parametres.getGET(page); }
+	this.getGET 	= function(page = PARAMETRE_PAGE_INITIALE){ return this.url + this.resultats.parametres.getGET(page); }
 
 	this.rechercher = function(){
 		this.charger();
 
-		if(this.etat === RECHERCHE_ETAT_INTERMEDIAIRE && $("table#nav a#pnnext").text() !== "Suivant") // Si dernière page
+		if(this.etat === RECHERCHE_ETAT_INTERMEDIAIRE && $("table#nav a#pnnext").text() !== BTN_SUIVANT_TXT) // Si dernière page
 			this.etat = RECHERCHE_ETAT_FINAL;
 
 		switch(this.etat){
@@ -357,15 +444,17 @@ function GooglePage(){
 	var that = this;
 	this.resultats = "";
 
-	// Suppression Cookies, annonces et "CNSO"
+	// Suppression annonces, "CNSO", et catégories Shopping, Livres
 	this.enleverSpamBoxes = function(){
 		$("#cnso").parent().remove();
 		$("#cnsd").parent().parent().parent().parent().remove();
 		$("#bottomads").remove();
 
-		$("a.q.qs:contains('Shopping')").remove();
-		$("a.q.qs:contains('Livres')").remove();
-		$("a.q.qs:contains('Vols')").remove();
+		if(PRO_MOD){
+			$("a.q.qs:contains('Shopping')").remove();
+			$("a.q.qs:contains('Livres')").remove();
+			$("a.q.qs:contains('Vols')").remove();
+		}
 	}
 
 	// Changement du comportement du bouton de la barre de recherche
@@ -380,13 +469,11 @@ function GooglePage(){
 		});
 	}
 
-	// Permet de désactiver les checkboxes quand inutiles
-	this.switchCB = function(enabled, bool){
+	// Permet de décocher les checkboxes suite à un switch
+	this.switchCB = function(enabled){
 		$("#GS_toolbar > div > input:checkbox").each(function(){
-			if($(this).attr("id") != enabled){
-				if(!bool) $(this).removeAttr("disabled");
-				else if(bool) $(this).attr("disabled", true);
-			}
+			if($(this).attr("id") != enabled)
+				$(this).prop('checked', false);
 		});
 	}
 
@@ -411,17 +498,25 @@ function GooglePage(){
 	this.ajoutCheckbox = function(id, typeTris){
 		$("#GS_toolbar").append("<div class='hdtb-mitem hdtb-imb hdtb-tl'><input id='"+id+"' type='checkbox'></div>");
 		$("#"+id).change(function(){
-			if($("#GS_contenu").length){
-				recherche.tris = 0;
-				$("#rcnt").html(this.resultats);
-				that.switchCB(id, false);
-			}else{
-				this.resultats = $("#rcnt").html();
-				that.switchCB(id, true);
-				recherche.tris = typeTris;
-				recherche.recuperer();
-				recherche.afficher();
-				recherche.reinitialiser();
+			if($('#rcnt').length < 1) return;
+			switch($("#GS_toolbar > div > input:checked").length){ // Si aucune autre checkbox n'est cochée
+				case 0:
+					recherche.tris = 0;
+					$("#rcnt").html(that.resultats);
+					break;
+				case 1:
+					that.resultats = $("#rcnt").html();
+					recherche.tris = typeTris;
+					recherche.recuperer();
+					recherche.afficher();
+					recherche.reinitialiser();
+					break;
+				case 2:
+					that.switchCB(id);
+					recherche.tris = typeTris;
+					recherche.afficher();
+					recherche.reinitialiser();
+				default:
 			}
 		});
 	}
@@ -430,6 +525,7 @@ function GooglePage(){
 		$("body").append("<div id='GS_toolbar'></div>");
 		$("#GS_toolbar")
 			.css("position","fixed")
+			.css("z-index","1000")
 			.css("top","150px")
 			.css("left","0")
 			.css("width","70px");
@@ -457,11 +553,31 @@ function GooglePage(){
 			e.preventDefault();
 			document.location.href = this.href;
 		});
-		if( recherche.parametres.isN100() ){
+		if( recherche.resultats.parametres.isN100() ){
 			$("table#nav td a.fl").each(function(){
-				this.href = this.href + "&num=100";
+				this.href = this.href + recherche.resultats.parametres.getParamsRecherche(); // duplication possible
 			});
-			$("table#nav td a#pnnext").attr("href",$("table#nav td a#pnnext").attr("href")+"&num=100");
+			$("table#nav td a#pnprev").attr("href",$("table#nav td a#pnprev").attr("href")+recherche.resultats.parametres.getParamsRecherche());
+			$("table#nav td a#pnnext").attr("href",$("table#nav td a#pnnext").attr("href")+recherche.resultats.parametres.getParamsRecherche());
+		}
+	}
+
+	// Mise à jour des onglets
+	this.majTabs = function(){ // ne pas passer par une variable dans les blocks : reférence distribuée entre chaque et écrasée
+		if( !recherche.resultats.parametres.isSearchPage() ){
+			$("div#top_nav a.q.qs:contains("+A_SEARCHTAB_TXT+")").attr("href",
+				$("div#top_nav a.q.qs:contains("+A_SEARCHTAB_TXT+")").attr("href") + recherche.resultats.parametres.getParamsRecherche());
+			$("div#top_nav a.q.qs:contains("+A_SEARCHTAB_TXT+")").click(function(){ document.location.href = $(this).attr("href"); });
+		}
+		if( !recherche.resultats.parametres.isNewsPage() ){
+			$("div#top_nav a.q.qs:contains("+A_NEWSTAB_TXT+")").attr("href",
+				$("div#top_nav a.q.qs:contains("+A_NEWSTAB_TXT+")").attr("href") + recherche.resultats.parametres.getParamsRecherche());
+			$("div#top_nav a.q.qs:contains("+A_NEWSTAB_TXT+")").click(function(){ document.location.href = $(this).attr("href"); });
+		}
+		if( !recherche.resultats.parametres.isVideoPage() ){
+			$("div#top_nav a.q.qs:contains("+A_VIDEOTAB_TXT+")").attr("href",
+				$("div#top_nav a.q.qs:contains("+A_VIDEOTAB_TXT+")").attr("href") + recherche.resultats.parametres.getParamsRecherche());
+			$("div#top_nav a.q.qs:contains("+A_VIDEOTAB_TXT+")").click(function(){ document.location.href = $(this).attr("href"); });
 		}
 	}
 
@@ -471,24 +587,29 @@ function GooglePage(){
 		if(recherche.etat === 0 || recherche.etat === RECHERCHE_ETAT_FINAL){
 			this.enleverSpamBoxes();
 
-			this.changerRecherche();
+			if(PRO_MOD){
+				this.changerRecherche();
+				this.majPaging();
+			}
 			this.enleverReformulationUrls();
-			this.majPaging();
 
 			this.ajoutToolbar();
 			this.ajoutCheckbox("GS_compacter"				,RECHERCHE_VUE_COMPACTE);
 			this.ajoutCheckbox("GS_dates"					,RECHERCHE_VUE_DATES);
 			this.ajoutCheckbox("GS_urls"					,RECHERCHE_VUE_URLS);
 			this.ajoutCheckbox("GS_fqdn"					,RECHERCHE_VUE_FQDNS);
-			this.ajoutCheckbox("GS_bubbleChart"				,RECHERCHE_GRAPHE_BUBBLE);
-			this.ajoutCheckbox("GS_dendroGraphe"			,RECHERCHE_GRAPHE_DENDRO);
-			this.ajoutCheckbox("GS_collapsibleTreeGraphe"	,RECHERCHE_GRAPHE_COLLAPSIBLE_TREE);
-			this.ajoutCheckbox("GS_forceGraphe"				,RECHERCHE_GRAPHE_FORCE);
+			this.ajoutCheckbox("GS_bubbleGraphe"			,RECHERCHE_GRAPHE_BUBBLE);
+			this.ajoutCheckbox("GS_dendroTreeGraphe"		,RECHERCHE_GRAPHE_DENDRO_TREE);
+			this.ajoutCheckbox("GS_treeGraphe"				,RECHERCHE_GRAPHE_TREE);
+			this.ajoutCheckbox("GS_radialTreeGraphe"		,RECHERCHE_GRAPHE_RADIAL_TREE);
+			this.ajoutCheckbox("GS_forceTreeGraphe"			,RECHERCHE_GRAPHE_FORCE_TREE);
 			this.ajoutBtnScrap();
 			this.ajoutBtnReset();
 
-			$("div#sfdiv").html($("div#sfdiv").html()); // Pour enlever les events sur la barre de recherches
-			this.enleverIntermediaireRecherche();
+			if(PRO_MOD){
+				$("div#sfdiv").html($("div#sfdiv").html()); // Pour enlever les events sur la barre de recherches
+				this.enleverIntermediaireRecherche();
+			}
 		}else{
 			this.ajoutToolbar();
 			this.ajoutBtnReset();
@@ -498,9 +619,11 @@ function GooglePage(){
 }
 
 $(document).ready(function(){
+	gp.majTabs(); // Mettre une url à la place d'une requête ajax.
 	if(
-		recherche.parametres.isSearchPage() || 
-		recherche.parametres.isVideoPage()
+		recherche.resultats.parametres.isSearchPage() || 
+		recherche.resultats.parametres.isVideoPage() ||
+		recherche.resultats.parametres.isNewsPage()
 	){
 		recherche.rechercher();
 		gp.ameliorerPage();	// Modification interface = nouveaux boutons + ...
@@ -560,7 +683,8 @@ $(document).ready(function(){
 			a.host.split('.').reverse().join(RECHERCHE_GRAPHE_SEPARATEUR).toLowerCase() + RECHERCHE_GRAPHE_SEPARATEUR +
 			"[f]" +
 			a.pathname.split(RECHERCHE_GRAPHE_SEPARATEUR).join('_') // On enlève ce qui sert de séparateur et présent dans l'url
-				.split('/').join(RECHERCHE_GRAPHE_SEPARATEUR); // On remplace les sous-dossiers par le séparateur
+				.split('/').join(RECHERCHE_GRAPHE_SEPARATEUR)+ // On remplace les sous-dossiers par le séparateur
+			a.search + a.hash;
 	}
 
 	// Filtrage rapide à base de listes de mots pour enlever le plus fréquent et inutile
@@ -664,22 +788,22 @@ $(document).ready(function(){
 
 	// Dessine une vue arborescente des domaines en sens inverse avec leurs dossiers fusionés séparés par des points ;
 	// Les feuilles sont au même niveau
-	function dendroGraphe(data, id_graphe){
-		var svg = d3.select("#"+id_graphe),	width = +svg.attr("width"),	height = +svg.attr("height"), g = svg.append("g").attr("transform", "translate(40,0)");
+	function dendroGraphe(data, id_graphe, height){ // faut collapsible pour ne plus se soucier de la hauteur
+		var svg = d3.select("#"+id_graphe),	width = +svg.attr("width");
+		svg.attr("transform", "translate(40,0)")
+			.call(d3.zoom().scaleExtent([1 / 8, 4]).on("zoom", function() { g.attr("transform", d3.event.transform); })); // Pour le zoom
+
+		var g = svg.append("g"); // On créé un elem html g qui va contenir le maillage de liens, on utilise ensuite la var g pour ajouter les autres elements 
+
 		var stratify = d3.stratify().parentId(function(d) { return d.id.substring(0, d.id.lastIndexOf(RECHERCHE_GRAPHE_SEPARATEUR)); });
-		var tree = d3.cluster().size([height, width - 560]);
+		var tree = d3.cluster().size([height, width]);
 		var root = stratify(data).sort(function(a, b) { return (a.height - b.height) || a.id.localeCompare(b.id); });
 		tree(root);
 		var link = g.selectAll(".link")
 			.data(root.descendants().slice(1))
 			.enter().append("path")
 			.attr("class", "link")
-			.attr("d", function(d) {
-				return "M" + d.y + "," + d.x
-				+ "C" + (d.parent.y + 100) + "," + d.x
-				+ " " + (d.parent.y + 100) + "," + d.parent.x
-				+ " " + d.parent.y + "," + d.parent.x;
-			});
+			.attr("d", function(d) { return "M" + d.y + "," + d.x + "C" + (d.parent.y + 100) + "," + d.x + " " + (d.parent.y + 100) + "," + d.parent.x + " " + d.parent.y + "," + d.parent.x; });
 		var node = g.selectAll(".node").data(root.descendants()).enter().append("g")
 			.attr("class", function(d) { return "node" + (d.children ? " node--internal" : " node--leaf"); })
 			.attr("transform", function(d) { return "translate(" + d.y + "," + d.x + ")"; })
@@ -693,141 +817,180 @@ $(document).ready(function(){
 
 	// Dessine une vue arborescente des domaines en sens inverse avec leurs dossiers fusionés séparés par des points ;
 	// Les noeuds peuvent être regroupés par cliques 
-	function collapsibleTreeGraphe(data, id_graphe, id_checkbox_collapse){
-		var margin = {top: 20, right: 90, bottom: 30, left: 90},
-			width = $("svg#"+id_graphe).attr("width") - margin.left - margin.right,
-			height = $("svg#"+id_graphe).attr("height") - margin.top - margin.bottom;
-		var svg = d3.select("#"+id_graphe)
-			.attr("width", width + margin.right + margin.left)
-			.attr("height", height + margin.top + margin.bottom)
-			.append("g")
-			.attr("transform", "translate("+margin.left+","+margin.top+")");
-		var tree = d3.tree().size([height, width]);
+	function treeGraphe(data, id_graphe, id_checkbox_collapse){
+		// Misc. variables
+		var i = 0;
+		var duration = 500;
+		// size of the diagram
+		var viewerWidth = $("#"+id_graphe).attr("width");
+		var viewerHeight = $("#"+id_graphe).attr("height");
+		var treemap;
+
+		// define the zoomListener which calls the zoom function on the "zoom" event constrained within the scaleExtents
+		var zoomListener = d3.zoom().scaleExtent([1/8, 4]).on("zoom", zoom);
+		// define the baseSvg, attaching a class for styling and the zoomListener
+		var baseSvg = d3.select("#"+id_graphe)
+			.attr("width", viewerWidth)
+			.attr("height", viewerHeight)
+			.call(zoomListener);
+		// Append a group which holds all nodes and which the zoom Listener can act upon.
+		var svgGroup = baseSvg.append("g");
+
+		// Define the root
+		var tree = d3.tree().size([viewerHeight, viewerWidth]);
 		var stratify = d3.stratify().parentId(function(d) { return d.id.substring(0, d.id.lastIndexOf(RECHERCHE_GRAPHE_SEPARATEUR)); });
 		var root = stratify(data).sort(function(a, b) { return (a.height - b.height) || a.id.localeCompare(b.id); });
 
-		root.x0 = height / 2;
-		root.y0 = 0;
+		root.x0 = viewerHeight / 2;
+		root.y0 = 50;
 
-		// Collapse au niveau des dossiers
-		root.children.forEach(collapse);
-		update(root, tree);
+		// Layout the tree initially and center on the root node.
+		update(root);
+		centerNode(root);
+
+		// Collapse or expand folder nodes
 		$("#"+id_checkbox_collapse).click(function(){
-			if(this.checked)
-				root.children.forEach(expand);
-			else
-				root.children.forEach(collapse);
-			update(root, tree);
+			if(!this.checked) root.children.forEach(expand);
+			else root.children.forEach(collapse);
+			update(root);
+			centerNode(root);
 		});
+		
+		// Define the zoom function for the zoomable tree
+		function zoom(){ if(d3.event.transform != null) svgGroup.attr("transform", d3.event.transform ); }
 
-		function update(source, tree){
-			var DEPTH = 100; // Taille des arrêtes
-			var RAYON = 3; // Taille des cercles
-			var duration = 100;
-			var i = 0;
-
-			var treeData = tree(root); // Assigns the x and y position for the nodes
-			var nodes = treeData.descendants(),	links = treeData.descendants().slice(1); // Compute the new tree layout.
-			nodes.forEach(function(d){ d.y = d.depth * DEPTH}); // Normalize for fixed-depth.
-
-			// ****************** Nodes section ***************************
-
-			// Update the nodes...
-			var node = svg.selectAll('g.node').data(nodes, function(d) {return d.id || (d.id = ++i); });
-
-			// Enter any new modes at the parent's previous position.
-			var nodeEnter = node.enter().append('g').attr('class', 'node').attr("transform", function(d) { return "translate(" + source.y0 + "," + source.x0 + ")"; }).on('click', click);
-
-			// Add Circle for the nodes
-			nodeEnter.append('circle').attr('class', 'node').attr('r', 1e-6).style("fill", function(d) {
-				return d._children ? "#999" : "#fff";
-			});
-
-			// Add labels for the nodes
-			nodeEnter.append('text')
-				.attr("dy", ".35em")
-				.attr("x", function(d) { return d.children || d._children ? -13 : 13; }).attr("text-anchor", function(d) { return d.children || d._children ? "end" : "start"; })
-				.text(function(d) { return d.id.substring(d.id.lastIndexOf(RECHERCHE_GRAPHE_SEPARATEUR) + 1); });
-
-			// UPDATE
-			var nodeUpdate = nodeEnter.merge(node);
-			// Transition to the proper position for the node
-			nodeUpdate.transition().duration(duration).attr("transform", function(d) { return "translate(" + d.y + "," + d.x + ")"; });
-			// Update the node attributes and style
-			nodeUpdate.select('circle.node').attr('r', RAYON).style("fill", function(d) { 
-				return d._children ? "#999" : "#fff";
-			}).attr('cursor', 'pointer');
-
-			// Remove any exiting nodes
-			var nodeExit = node.exit().transition().duration(duration).attr("transform", function(d) { return "translate(" + source.y + "," + source.x + ")"; }).remove();
-			nodeExit.select('circle').attr('r', 1e-6); // On exit reduce the node circles size to 0
-			nodeExit.select('text').style('fill-opacity', 1e-6); // On exit reduce the opacity of text labels
-
-			// ****************** links section ***************************
-
-			// Update the links...
-			var link = svg.selectAll('path.link').data(links, function(d) { return d.id; });
-			// Enter any new links at the parent's previous position.
-			var linkEnter = link.enter().insert('path', "g").attr("class", "link").attr('d', function(d){ var o = {x: source.x0, y: source.y0}; return diagonal(o, o); });
-			// UPDATE
-			var linkUpdate = linkEnter.merge(link);
-			// Transition back to the parent element position
-			linkUpdate.transition().duration(duration).attr('d', function(d){ return diagonal(d, d.parent) });
-			// Remove any exiting links
-			var linkExit = link.exit().transition().duration(duration).attr('d', function(d) { var o = {x: source.x, y: source.y}; return diagonal(o,o); }).remove();
-			// Store the old positions for transition.
-			nodes.forEach(function(d){ d.x0 = d.x; d.y0 = d.y; });
-			// Creates a curved (diagonal) path from parent to the child nodes
-			function diagonal(s, d) {
-				path = `M ${s.y} ${s.x}
-						C ${(s.y + d.y) / 2} ${s.x},
-						  ${(s.y + d.y) / 2} ${d.x},
-						  ${d.y} ${d.x}`
-				return path;
-			}
-
-			// Toggle children on click.
-			function click(d) {
-				if (d.children) {
-					d._children = d.children;
-					d.children = null;
-				} else {
-					d.children = d._children;
-					d._children = null;
-				}
-				update(d,tree);
-			}
+		// Function to center node when clicked/dropped so node doesn't get lost when collapsing/moving with large amount of children.
+		function centerNode(source){
+			t = d3.zoomTransform(baseSvg.node());
+			x = -source.y0;
+			y = -source.x0;
+			x = x * t.k + viewerWidth / 2;
+			y = y * t.k + viewerHeight / 2;
+			d3.select("#"+id_graphe).transition().duration(duration).call( zoomListener.transform, d3.zoomIdentity.translate(x,y).scale(t.k) );
 		}
 
+		// Toggle children function
+		function toggleChildren(d){
+			if(d.children){
+				d._children = d.children;
+				d.children = null;
+			}else if(d._children){
+				d.children = d._children;
+				d._children = null;
+			}
+			return d;
+		}
+
+		// Toggle children on click.
+		function click(d){
+			if (d3.event.defaultPrevented) return; // click suppressed
+			d = toggleChildren(d);
+			update(d);
+			centerNode(d);
+		}
+		
+		// Erzeugen geschwungene Linie vom Eltern- zum Kind-Knoten
+		function diagonal(s, d){
+			return `M ${s.y} ${s.x}
+				C ${(s.y + d.y) / 2} ${s.x},
+				${(s.y + d.y) / 2} ${d.x},
+				${d.y} ${d.x}`;
+		}
+
+		function update(source){
+			// Compute the new height, function counts total children of root node and sets tree height accordingly.
+			// This prevents the layout looking squashed when new nodes are made visible or looking sparse when nodes are removed
+			// This makes the layout more consistent.
+			var levelWidth = [1];
+			var childCount = function(level, n) {
+				if(n.children && n.children.length > 0){
+					if(levelWidth.length <= level + 1) levelWidth.push(0);
+					levelWidth[level + 1] += n.children.length;
+					n.children.forEach(function(d){ childCount(level + 1, d); });
+				}
+			};
+			childCount(0, root);
+			var newHeight = d3.max(levelWidth) * 15; // 15 pixels per line  
+			// Baum-Layout erzeugen und die Größen zuweisen
+			treemap = d3.tree().size([newHeight, viewerWidth]);
+			// Berechnung x- und y-Positionen pro Knoten
+			var treeData = treemap(root);
+			// Compute the new tree layout.
+			var nodes = treeData.descendants(),
+				links = treeData.descendants().slice(1);
+
+			// Set widths between levels.
+			nodes.forEach(function(d){ d.y = (d.depth * 150); });
+			node = svgGroup.selectAll("g.node").data(nodes, function(d) { return d.id || (d.id = ++i); }); // Update the nodes…
+			// Enter any new nodes at the parent's previous position.
+			var nodeEnter = node.enter().append("g")
+				.attr("class", "node")
+				.attr("transform", function(d) { return "translate(" + source.y0 + "," + source.x0 + ")"; })
+				.on('click', click);
+			nodeEnter.append("circle")
+				.attr('class', 'nodeCircle')
+				.attr("r", 4.5)
+				.style("fill", function(d){ return d._children ? "lightsteelblue" : "#fff"; });
+			nodeEnter.append("text")
+				.attr("x", function(d){ return d.children || d._children ? -10 : 10; })
+				.attr("dy", ".35em")
+				.attr('class', 'nodeText')
+				.attr("text-anchor", function(d) { return d.children || d._children ? "end" : "start"; })
+				.text(function(d) { return d.id.substring(d.id.lastIndexOf(RECHERCHE_GRAPHE_SEPARATEUR)+1); })
+				.style("fill-opacity", 0);
+
+			// Update the text to reflect whether node has children or not.
+			node.select('text')
+				.attr("x", function(d) { return d.children || d._children ? -10 : 10; })
+				.attr("text-anchor", function(d) { return d.children || d._children ? "end" : "start"; })
+				.text(function(d) { return d.id.substring(d.id.lastIndexOf(RECHERCHE_GRAPHE_SEPARATEUR)+1); });
+			// Change the circle fill depending on whether it has children and is collapsed
+			node.select("circle.nodeCircle").attr("r", 4.5).style("fill", function(d){ return d._children ? "lightsteelblue" : "#fff"; });
+			// Transition nodes to their new position.
+			var nodeUpdate = nodeEnter.merge(node);
+			nodeUpdate.transition().duration(duration).attr("transform", function(d){ return "translate(" + d.y + "," + d.x + ")"; });
+			// Fade the text in
+			nodeUpdate.select("text").style("fill-opacity", 1);
+			// Transition exiting nodes to the parent's new position.
+			var nodeExit = node.exit().transition().duration(duration).attr("transform", function(d){ return "translate(" + source.y + "," + source.x +")";}).remove();
+			nodeExit.select("circle").attr("r", 0);
+			nodeExit.select("text").style("fill-opacity", 0);
+			// Update the links…
+			var link = svgGroup.selectAll("path.link").data(links, function(d) { return d.id; });
+			// Enter any new links at the parent's previous position.
+			var linkEnter = link.enter().insert("path", "g").attr("class", "link").attr("d", function(d){ var o = { x: source.x0, y: source.y0 }; return diagonal(o, o); });
+
+			// Transition links to their new position.
+			var linkUpdate = linkEnter.merge(link);
+			linkUpdate.transition().duration(duration).attr('d', function(d){ return diagonal(d, d.parent) });
+			// Transition exiting nodes to the parent's new position.
+			var linkExit = link.exit().transition().duration(duration).attr("d", function(d){ var o = { x: source.x, y: source.y }; return diagonal(o, o); }).remove();
+			// Stash the old positions for transition.
+			nodes.forEach(function(d){ d.x0 = d.x; d.y0 = d.y; });
+		}
+	
 		// Collapse au niveau des dossiers
-		function collapse(d) {
-			if(d.children) {
-				if(d.id.substring(d.id.lastIndexOf(RECHERCHE_GRAPHE_SEPARATEUR) + 1) == "[f]"){
-					d._children = d.children;
-					d.children = null;
-				} else
-					d.children.forEach(collapse);
+		function collapse(d){
+			if(d.children){
+				if(d.id.substring(d.id.lastIndexOf(RECHERCHE_GRAPHE_SEPARATEUR)+1) === "[f]") toggleChildren(d);
+				else d.children.forEach(collapse);
 			}
 		}
 
 		// Expand l'ensemble des noeuds
-		function expand(d) {
-			if(d._children){
-				d.children = d._children;
-				d._children = null;
-			}
-			if(d.children)
-				d.children.forEach(expand);
+		function expand(d){
+			if(d._children) toggleChildren(d);
+			if(d.children) d.children.forEach(expand);
 		}
 	}
 
 	// Vue affichant un ensemble de données et leur fréquences sous forme de bulles avec des tailles pondérées
-	function bubbleChartGraphe(classes, id_graphe){
+	function bubbleGraphe(classes, id_graphe){
 		var svg = d3.select("#"+id_graphe), width = +svg.attr("width"), height = +svg.attr("height");
 		var format = d3.format(",d");
 		var color = d3.scaleOrdinal(d3.schemeCategory20c);
 		var pack = d3.pack().size([width, height]).padding(1.5);
-		var root = d3.hierarchy({children: classes}).sum(function(d) { return d.value; }).each(function(d) {
+		var root = d3.hierarchy({children: classes}).sum(function(d) { return d.value; }).each(function(d){
 			if (id = d.data.id) {
 				var id, i = id.lastIndexOf(RECHERCHE_GRAPHE_SEPARATEUR);
 				d.id = id;
@@ -862,123 +1025,87 @@ $(document).ready(function(){
 
 	// Vue affichant un ensemble de données et leur fréquences sous forme de bulles avec des tailles pondérées
 	function forceGraphe(data, id_graphe){
+		// Mise en forme des données : nodes et links entre nodes
+		var root = d3.stratify().parentId(function(d) { return d.id.substring(0, d.id.lastIndexOf(RECHERCHE_GRAPHE_SEPARATEUR)); })(data);
+		var graph = { nodes : root.descendants(), links : root.links() };
+
 		var svg = d3.select("#"+id_graphe), width = +svg.attr("width"), height = +svg.attr("height");
-		//initialising hierarchical data
-		var tree = d3.tree().size([height, width]);
-		var stratify = d3.stratify()
-			.parentId(function(d) { return d.id.substring(0, d.id.lastIndexOf(RECHERCHE_GRAPHE_SEPARATEUR)); });
-		var root = stratify(data).sort(function(a, b) { return (a.height - b.height) || a.id.localeCompare(b.id); });
 
-		console.log(root);
-		var i = 0;
-		var transform = d3.zoomIdentity;
-		var nodeSvg, linkSvg, simulation, nodeEnter, linkEnter;
+		// Pour le zoom
+		var g = svg.append("g"); // On créé un elem html g qui va contenir le maillage de liens, on utilise ensuite la var g pour ajouter les autres elements 
+		svg.call(d3.zoom().scaleExtent([1 / 8, 4]).on("zoom", function() { g.attr("transform", d3.event.transform); }));
 
-		svg.call(d3.zoom().scaleExtent([1 / 2, 8]).on("zoom", zoomed)).append("g").attr("transform", "translate(40,0)");
-
-		function zoomed(){ svg.attr("transform", d3.event.transform); }
-
-		simulation = d3.forceSimulation()
-			.force("link", d3.forceLink().id(function(d) { return d.id; }))
-			.force("charge", d3.forceManyBody())
+		var color = d3.scaleOrdinal(d3.schemeCategory20); // gestion des couleurs avec la classe css "node"
+		var simulation = d3.forceSimulation()
 			.force("center", d3.forceCenter(width / 2, height / 2))
-			.on("tick", ticked);
+			.force("charge", d3.forceManyBody().strength(-140))
+			.force("link", d3.forceLink().id(function(d) { return d.id; }));
 
-		update();
+		simulation.nodes(graph.nodes);
+		simulation.force("link").links(graph.links);
+		
 
-		function update() {
-			var nodes = flatten(root);
-			var links = root.links();
+		var link = g.selectAll(".link").data(graph.links)
+			.enter().append("line")
+			.attr("class", "link").attr("stroke-width", function(d) { return Math.sqrt(d.value); });
+		var node = g.selectAll(".node")
+			.data(graph.nodes)
+			.enter().append("g")
+			.attr("class", "node")
+			.call(d3.drag().on("start", dragstarted).on("drag", dragged).on("end", dragended)); // On applique ça sur les noeuds (quand on en déplace un)
 
-			linkSvg = svg.selectAll(".link")
-			.data(links, function(d) { return d.target.id; })
+		node.append("circle")
+			.attr("r", 5)
+			.attr("fill", function(d) { return color(d.group); })
+		node.append("title").text(function(d) { return d.data.id.substring(d.id.lastIndexOf(RECHERCHE_GRAPHE_SEPARATEUR)+1); });
+		node.append("text")
+			.attr("dx", 12)
+			.attr("dy", ".35em")
+			.text(function(d) { return d.data.id.substring(d.id.lastIndexOf(RECHERCHE_GRAPHE_SEPARATEUR)+1); });
 
-			linkSvg.exit().remove();
-
-			var linkEnter = linkSvg.enter()
-				.append("line")
-				.attr("class", "link");
-			
-			linkSvg = linkEnter.merge(linkSvg)
-			
-			nodeSvg = svg.selectAll(".node")
-			.data(nodes, function(d) { return d.id; })
-
-			nodeSvg.exit().remove();
-
-			var nodeEnter = nodeSvg.enter()
-			.append("g")
-				.attr("class", "node")
-				.on("click", click)
-				.call(d3.drag()
-				.on("start", dragstarted)
-				.on("drag", dragged)
-				.on("end", dragended))
-
-			nodeEnter.append("circle")
-				.attr("r", 4)
-				.append("title")
-				.text(function(d) { return d.data.id.substring(d.id.lastIndexOf(RECHERCHE_GRAPHE_SEPARATEUR)+1); })
-
-			nodeEnter.append("text")
-				.attr("dy", 3)
-				.attr("x", function(d) { return d.children ? -8 : 8; })
-				.style("text-anchor", function(d) { return d.children ? "end" : "start"; })
-				.text(function(d) { return d.data.id.substring(d.id.lastIndexOf(RECHERCHE_GRAPHE_SEPARATEUR)+1); });
-			
-			nodeSvg = nodeEnter.merge(nodeSvg);
-			
-			simulation
-				.nodes(nodes)
-
-			simulation.force("link")
-				.links(links);
-		}
-
-		function ticked() {
-			linkSvg.attr("x1", function(d) { return d.source.x; })
+		simulation.on("tick", function(){
+			link.attr("x1", function(d) { return d.source.x; })
 				.attr("y1", function(d) { return d.source.y; })
 				.attr("x2", function(d) { return d.target.x; })
 				.attr("y2", function(d) { return d.target.y; });
-			nodeSvg.attr("transform", function(d) { return "translate(" + d.x + ", " + d.y + ")"; });
-		}
+			node.attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; });
+		});
 
-		function click (d) {
-			if(d.children){
-				d._children = d.children;
-				d.children = null;
-				update();
-				simulation.restart();
-			} else {
-				d.children = d._children;
-				d._children = null;
-				update();
-				simulation.restart();
-			}
-		}
+		function dragstarted(d){ if (!d3.event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }
+		function dragged(d){ d.fx = d3.event.x; d.fy = d3.event.y; }
+		function dragended(d){ if (!d3.event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }
+	}
 
-		function dragstarted(d) {
-			if(!d3.event.active) simulation.alphaTarget(0.3).restart();
-			simulation.fix(d);
-		}
-
-		function dragged(d){ simulation.fix(d, d3.event.x, d3.event.y); }
-
-		function dragended(d) {
-			if (!d3.event.active) simulation.alphaTarget(0);
-			simulation.unfix(d);
-		}
-
-		function flatten (root) {
-			// hierarchical data to flat data for force layout
-			var nodes = [];
-			function recurse(node) {
-				if (node.children) node.children.forEach(recurse);
-				if (!node.id) node.id = ++i;
-				else ++i;
-				nodes.push(node);
-			}
-			recurse(root);
-			return nodes;
-		}
+	function radialTreeGraphe(data, id_graphe){
+		var stratify = d3.stratify().parentId(function(d) { return d.id.substring(0, d.id.lastIndexOf(RECHERCHE_GRAPHE_SEPARATEUR)); });
+		var tree = d3.tree()
+			.size([2 * Math.PI, 500])
+			.separation(function(a, b) { return (a.parent == b.parent ? 1 : 2) / a.depth; });
+		var root = tree(stratify(data));
+		
+		var svg = d3.select("#"+id_graphe),	width = +svg.attr("width"),	height = +svg.attr("height");
+		// Pour le zoom
+		var g = svg.append("g"); //.attr("transform", "translate(" + (width / 2 + 40) + "," + (height / 2 + 90) + ")");
+		svg.call(d3.zoom().scaleExtent([1 / 8, 4]).on("zoom", function() { g.attr("transform", d3.event.transform); }));
+		
+		var link = g.selectAll(".link")
+			.data(root.links())
+			.enter().append("path")
+			.attr("class", "link")
+			.attr("d", d3.linkRadial()
+			.angle(function(d) { return d.x; })
+			.radius(function(d) { return d.y; }));
+		var node = g.selectAll(".node")
+			.data(root.descendants())
+			.enter().append("g")
+			.attr("class", function(d) { return "node" + (d.children ? " node--internal" : " node--leaf"); })
+			.attr("transform", function(d) { return "translate(" + radialPoint(d.x, d.y) + ")"; });
+		node.append("circle").attr("r", 2.5);
+		node.append("text")
+			.attr("dy", "0.31em")
+			.attr("x", function(d) { return d.x < Math.PI === !d.children ? 6 : -6; })
+			.attr("text-anchor", function(d) { return d.x < Math.PI === !d.children ? "start" : "end"; })
+			.attr("transform", function(d) { return "rotate(" + (d.x < Math.PI ? d.x - Math.PI / 2 : d.x + Math.PI / 2) * 180 / Math.PI + ")"; })
+			.text(function(d) { return d.id.substring(d.id.lastIndexOf(RECHERCHE_GRAPHE_SEPARATEUR) + 1); });
+		function radialPoint(x, y){ return [(y = +y) * Math.cos(x -= Math.PI / 2), y * Math.sin(x)]; }
 	}
